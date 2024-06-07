@@ -14,9 +14,10 @@ def cosine_similarity(vector_a: np.array, vector_b: np.array) -> float:
 
 
 class VectorDatabase:
-    def __init__(self, embedding_model: EmbeddingModel = None):
+    def __init__(self, embedding_model: EmbeddingModel = None, similarity_function: Callable = cosine_similarity):
         self.vectors = defaultdict(np.array)
         self.embedding_model = embedding_model or EmbeddingModel()
+        self.similarity_function = similarity_function
 
     def insert(self, key: str, vector: np.array) -> None:
         self.vectors[key] = vector
@@ -27,6 +28,9 @@ class VectorDatabase:
         k: int,
         distance_measure: Callable = cosine_similarity,
     ) -> List[Tuple[str, float]]:
+        if self.similarity_function != None:
+            distance_measure = self.similarity_function
+        
         scores = [
             (key, distance_measure(query_vector, vector))
             for key, vector in self.vectors.items()

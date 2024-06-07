@@ -6,3 +6,4 @@ scikit-learn
 ipykernel
 matplotlib
 plotly
+pymupdf==1.24.5
