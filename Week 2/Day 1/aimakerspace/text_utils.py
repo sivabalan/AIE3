@@ -1,5 +1,6 @@
 import os
 from typing import List
+import pymupdf
 
 
 class TextFileLoader:
@@ -30,6 +31,39 @@ class TextFileLoader:
                         os.path.join(root, file), "r", encoding=self.encoding
                     ) as f:
                         self.documents.append(f.read())
+
+    def load_documents(self):
+        self.load()
+        return self.documents
+
+# Activity #1: Allow it to work with PDF files    
+class PDFFileLoader:
+    def __init__(self, path: str):
+        self.documents = []
+        self.path = path
+
+    def load_file(self, path: str):
+        reader = pymupdf.open(path) # open a document
+        document = ""
+        for page in reader:
+            document += page.get_text() + '\n'
+        self.documents.append(document)
+    
+    def load_directory(self):
+        for root, _, files in os.walk(self.path):
+            for file in files:
+                if file.endswith(".pdf"):
+                    self.load_file(os.path.join(root, file))
+
+    def load(self):
+        if os.path.isdir(self.path):
+            self.load_directory()
+        elif os.path.isfile(self.path) and self.path.endswith(".pdf"):
+            self.load_file(self.path)
+        else:
+            raise ValueError(
+                "Provided path is neither a valid directory nor a .pdf file."
+            )
 
     def load_documents(self):
         self.load()
