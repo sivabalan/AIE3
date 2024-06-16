@@ -2,6 +2,10 @@
 
 To use OpenAI's API throughout this bootcamp - please ensure you follow their new API Key process:
 
+1. Select the organisation where you want to create your new project. If you don't have any organisation set-up, the "Personal" organisation is selected by default. You can use it.
+
+![image](https://i.imgur.com/dZU1l9j.png)
+
 1. Create a new project, and name it "aim" or "aie3" (technically the name doesn't matter - but for ease of tracking it's likely good to use something to indicates this is a project for this course).
 
 ![image](https://i.imgur.com/RtYWMC3.png)
@@ -25,3 +29,7 @@ To use OpenAI's API throughout this bootcamp - please ensure you follow their ne
 6. Create your new secret key - ensuring it's associated with the project you created in step 1.
 
 ![image](https://i.imgur.com/0Fh1X6P.png)
+
+7. Verify credit and payment method. These are specific to each organisation. Make sure that you have some credit available and a payment method associated to the organisation in which your project and API key belong to.
+
+![image](https://i.imgur.com/CTxmKYw.png)
