@@ -3,13 +3,12 @@ import chainlit as cl
 from dotenv import load_dotenv
 from operator import itemgetter
 from langchain_huggingface import HuggingFaceEndpoint
-from langchain_community.document_loaders import TextLoader
+from langchain_community.document_loaders import PyMuPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import FAISS
+from langchain_community.vectorstores import Qdrant
 from langchain_huggingface import HuggingFaceEndpointEmbeddings
+from langchain_openai.embeddings import OpenAIEmbeddings
 from langchain_core.prompts import PromptTemplate
-from langchain.schema.output_parser import StrOutputParser
-from langchain.schema.runnable import RunnablePassthrough
 from langchain.schema.runnable.config import RunnableConfig
 
 # GLOBAL SCOPE - ENTIRE APPLICATION HAS ACCESS TO VALUES SET IN THIS SCOPE #
@@ -25,63 +24,80 @@ load_dotenv()
 We will load our environment variables here.
 """
 HF_LLM_ENDPOINT = os.environ["HF_LLM_ENDPOINT"]
-HF_EMBED_ENDPOINT = os.environ["HF_EMBED_ENDPOINT"]
 HF_TOKEN = os.environ["HF_TOKEN"]
 
 # ---- GLOBAL DECLARATIONS ---- #
 
 # -- RETRIEVAL -- #
 """
-1. Load Documents from Text File
+1. Load Documents from PDF File
 2. Split Documents into Chunks
 3. Load HuggingFace Embeddings (remember to use the URL we set above)
 4. Index Files if they do not exist, otherwise load the vectorstore
 """
-### 1. CREATE TEXT LOADER AND LOAD DOCUMENTS
-### NOTE: PAY ATTENTION TO THE PATH THEY ARE IN. 
-text_loader = 
-documents = 
+document_loader = PyMuPDFLoader("./data/airbnb_financials.pdf")
+documents = document_loader.load()
 
-### 2. CREATE TEXT SPLITTER AND SPLIT DOCUMENTS
-text_splitter = 
-split_documents = 
+text_splitter = RecursiveCharacterTextSplitter(chunk_size=200, chunk_overlap=30)
+split_documents = text_splitter.split_documents(documents)
 
-### 3. LOAD HUGGINGFACE EMBEDDINGS
-hf_embeddings = 
+openai_embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 
 if os.path.exists("./data/vectorstore"):
-    vectorstore = FAISS.load_local(
-        "./data/vectorstore", 
-        hf_embeddings, 
-        allow_dangerous_deserialization=True # this is necessary to load the vectorstore from disk as it's stored as a `.pkl` file.
+    vectorstore = Qdrant.from_existing_collection(
+        embeddings=openai_embeddings,
+        collection_name="airbnb_financials",
+        path="./data/vectorstore",
+        batch_size=32,
     )
-    hf_retriever = vectorstore.as_retriever()
     print("Loaded Vectorstore")
 else:
     print("Indexing Files")
     os.makedirs("./data/vectorstore", exist_ok=True)
-    ### 4. INDEX FILES
-    ### NOTE: REMEMBER TO BATCH THE DOCUMENTS WITH MAXIMUM BATCH SIZE = 32
+    vectorstore = Qdrant.from_documents(
+        documents=split_documents,
+        embedding=openai_embeddings,
+        path="./data/vectorstore",
+        collection_name="airbnb_financials",
+        batch_size=32,
+    )
 
-hf_retriever = vectorstore.as_retriever()
+retriever = vectorstore.as_retriever()
 
 # -- AUGMENTED -- #
 """
 1. Define a String Template
 2. Create a Prompt Template from the String Template
 """
-### 1. DEFINE STRING TEMPLATE
-RAG_PROMPT_TEMPLATE = 
+RAG_PROMPT_TEMPLATE = """\
+<|start_header_id|>system<|end_header_id|>
+You are a helpful assistant. You answer user questions based on provided context. If you can't answer the question with the provided context, say you don't know.<|eot_id|>
 
-### 2. CREATE PROMPT TEMPLATE
-rag_prompt =
+<|start_header_id|>user<|end_header_id|>
+User Query:
+{query}
+
+Context:
+{context}<|eot_id|>
+
+<|start_header_id|>assistant<|end_header_id|>
+"""
+
+rag_prompt = PromptTemplate.from_template(RAG_PROMPT_TEMPLATE)
 
 # -- GENERATION -- #
 """
 1. Create a HuggingFaceEndpoint for the LLM
 """
-### 1. CREATE HUGGINGFACE ENDPOINT FOR LLM
-hf_llm = 
+hf_llm = HuggingFaceEndpoint(
+    endpoint_url=HF_LLM_ENDPOINT,
+    max_new_tokens=512,
+    top_k=10,
+    top_p=0.95,
+    temperature=0.3,
+    repetition_penalty=1.15,
+    huggingfacehub_api_token=HF_TOKEN,
+)
 
 @cl.author_rename
 def rename(original_author: str):
@@ -91,7 +107,7 @@ def rename(original_author: str):
     In this case, we're overriding the 'Assistant' author to be 'Paul Graham Essay Bot'.
     """
     rename_dict = {
-        "Assistant" : "Paul Graham Essay Bot"
+        "Assistant" : "AirBnB Auditor"
     }
     return rename_dict.get(original_author, original_author)
 
@@ -105,8 +121,10 @@ async def start_chat():
     The user session is a dictionary that is unique to each user session, and is stored in the memory of the server.
     """
 
-    ### BUILD LCEL RAG CHAIN THAT ONLY RETURNS TEXT
-    lcel_rag_chain = 
+    lcel_rag_chain = (
+        {"context": itemgetter("query") | retriever, "query": itemgetter("query")}
+        | rag_prompt | hf_llm
+    )
 
     cl.user_session.set("lcel_rag_chain", lcel_rag_chain)
 
@@ -123,7 +141,7 @@ async def main(message: cl.Message):
 
     msg = cl.Message(content="")
 
-    async for chunk in lcel_rag_chain.astream(
+    for chunk in await cl.make_async(lcel_rag_chain.stream)(
         {"query": message.content},
         config=RunnableConfig(callbacks=[cl.LangchainCallbackHandler()]),
     ):

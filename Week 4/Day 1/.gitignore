@@ -4,3 +4,4 @@ __pycache__/
 *.faiss
 *.pkl
 .files
+airbnb-auditor/.git*
