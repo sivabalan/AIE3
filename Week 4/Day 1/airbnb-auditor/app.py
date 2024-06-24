@@ -24,6 +24,7 @@ We will load our environment variables here.
 """
 HF_LLM_ENDPOINT = os.environ["HF_LLM_ENDPOINT"]
 HF_TOKEN = os.environ["HF_TOKEN"]
+VECTOR_STORE_PATH = "./data/vectorstore"
 
 # ---- GLOBAL DECLARATIONS ---- #
 
@@ -40,23 +41,24 @@ documents = document_loader.load()
 text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=30)
 split_documents = text_splitter.split_documents(documents)
 
+# Note: Uses OPENAI_API_KEY env variable to make api calls
 openai_embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 
-if os.path.exists("./data/vectorstore"):
+if os.path.exists(VECTOR_STORE_PATH):
     vectorstore = Qdrant.from_existing_collection(
         embeddings=openai_embeddings,
         collection_name="airbnb_financials",
-        path="./data/vectorstore",
+        path=VECTOR_STORE_PATH,
         batch_size=32,
     )
     print("Loaded Vectorstore")
 else:
     print("Indexing Files")
-    os.makedirs("./data/vectorstore", exist_ok=True)
+    os.makedirs(VECTOR_STORE_PATH, exist_ok=True)
     vectorstore = Qdrant.from_documents(
         documents=split_documents,
         embedding=openai_embeddings,
-        path="./data/vectorstore",
+        path=VECTOR_STORE_PATH,
         collection_name="airbnb_financials",
         batch_size=32,
     )
@@ -70,7 +72,7 @@ retriever = vectorstore.as_retriever()
 """
 RAG_PROMPT_TEMPLATE = """\
 <|start_header_id|>system<|end_header_id|>
-You are a helpful assistant. You answer user questions based on provided context. If you can't answer the question with the provided context, say you don't know. Do not provide relevant context in response unless explicitly asked.<|eot_id|>
+You are a helpful assistant. You answer user questions based on provided context. If you can't answer the question with the provided context, say you don't know.<|eot_id|>
 
 <|start_header_id|>user<|end_header_id|>
 User Query:
@@ -144,6 +146,7 @@ async def main(message: cl.Message):
         {"query": message.content},
         config=RunnableConfig(callbacks=[cl.LangchainCallbackHandler()]),
     ):
+        # Note: Skip printing eot_id token at the end of response. A more elegant solution would be to fix the model's generator config. 
         if chunk != "<|eot_id|>":
             await msg.stream_token(chunk)
 
