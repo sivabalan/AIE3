@@ -6,7 +6,6 @@ from langchain_huggingface import HuggingFaceEndpoint
 from langchain_community.document_loaders import PyMuPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Qdrant
-from langchain_huggingface import HuggingFaceEndpointEmbeddings
 from langchain_openai.embeddings import OpenAIEmbeddings
 from langchain_core.prompts import PromptTemplate
 from langchain.schema.runnable.config import RunnableConfig
@@ -38,7 +37,7 @@ HF_TOKEN = os.environ["HF_TOKEN"]
 document_loader = PyMuPDFLoader("./data/airbnb_financials.pdf")
 documents = document_loader.load()
 
-text_splitter = RecursiveCharacterTextSplitter(chunk_size=200, chunk_overlap=30)
+text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=30)
 split_documents = text_splitter.split_documents(documents)
 
 openai_embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
@@ -71,7 +70,7 @@ retriever = vectorstore.as_retriever()
 """
 RAG_PROMPT_TEMPLATE = """\
 <|start_header_id|>system<|end_header_id|>
-You are a helpful assistant. You answer user questions based on provided context. If you can't answer the question with the provided context, say you don't know.<|eot_id|>
+You are a helpful assistant. You answer user questions based on provided context. If you can't answer the question with the provided context, say you don't know. Do not provide relevant context in response unless explicitly asked.<|eot_id|>
 
 <|start_header_id|>user<|end_header_id|>
 User Query:
@@ -145,6 +144,7 @@ async def main(message: cl.Message):
         {"query": message.content},
         config=RunnableConfig(callbacks=[cl.LangchainCallbackHandler()]),
     ):
-        await msg.stream_token(chunk)
+        if chunk != "<|eot_id|>":
+            await msg.stream_token(chunk)
 
     await msg.send()
